@@ -1,0 +1,8 @@
+{
+  "name": "Gemini Memo AI",
+  "description": "A smart, minimalist note-taking application powered by Gemini AI for summarization, smart tagging, and content refinement.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
