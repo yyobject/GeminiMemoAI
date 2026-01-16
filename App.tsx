@@ -3,6 +3,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Note } from './types';
 import NoteCard from './components/NoteCard';
 import NoteEditor from './components/NoteEditor';
+// Added checkIsOnPlatform to imports
+import { storage, UserInfo, checkIsOnPlatform } from './lib/platform';
 
 const STORAGE_KEY = 'gemini-notes-v1';
 
@@ -12,24 +14,30 @@ const App: React.FC = () => {
   const [editingNote, setEditingNote] = useState<Note | null>(null);
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [user, setUser] = useState<UserInfo | null>(null);
 
-  // Load from LocalStorage
+  // Load from Platform Storage
   useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      try {
-        setNotes(JSON.parse(saved));
-      } catch (e) {
-        console.error("Failed to parse notes", e);
+    const initApp = async () => {
+      await storage.init();
+      const [savedNotes, currentUser] = await Promise.all([
+        storage.get<Note[]>(STORAGE_KEY),
+        storage.getUser()
+      ]);
+      
+      if (savedNotes) {
+        setNotes(savedNotes);
       }
-    }
-    setIsLoaded(true);
+      setUser(currentUser);
+      setIsLoaded(true);
+    };
+    initApp();
   }, []);
 
-  // Save to LocalStorage
+  // Sync to Platform Storage on change
   useEffect(() => {
     if (isLoaded) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(notes));
+      storage.set(STORAGE_KEY, notes);
     }
   }, [notes, isLoaded]);
 
@@ -88,7 +96,7 @@ const App: React.FC = () => {
     }
   };
 
-  if (!isLoaded) return <div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-400 font-medium">Loading your notes...</div>;
+  if (!isLoaded) return <div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-400 font-medium animate-pulse text-lg">Initializing Gemini Workspace...</div>;
 
   return (
     <div className="min-h-screen flex flex-col md:flex-row">
@@ -140,10 +148,13 @@ const App: React.FC = () => {
         
         <div className="mt-auto p-6 border-t border-slate-50">
           <div className="bg-slate-50 rounded-2xl p-4 flex items-center gap-3">
-            <img src="https://picsum.photos/40/40" className="w-8 h-8 rounded-full border border-white" alt="Avatar" />
+            <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold text-xs uppercase">
+              {user?.name?.[0] || 'U'}
+            </div>
             <div className="overflow-hidden">
-              <p className="text-xs font-bold text-slate-800 truncate">Demo User</p>
-              <p className="text-[10px] text-slate-400 font-medium truncate">gemini-ai-pro</p>
+              <p className="text-xs font-bold text-slate-800 truncate">{user?.name || 'Demo User'}</p>
+              {/* Fix: checkIsOnPlatform is now imported from ./lib/platform */}
+              <p className="text-[10px] text-slate-400 font-medium truncate">{checkIsOnPlatform() ? 'Cloud Sync Enabled' : 'Local Storage Mode'}</p>
             </div>
           </div>
         </div>

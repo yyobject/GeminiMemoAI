@@ -1,15 +1,24 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
 import { AIServiceType } from "../types";
+import { checkIsOnPlatform } from "../lib/platform";
 
-// Corrected: Initialization must use process.env.API_KEY directly as a named parameter.
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Function to get AI instance with dynamic base URL
+const getAIInstance = () => {
+  return new GoogleGenAI({
+    apiKey: process.env.API_KEY,
+    httpOptions: {
+      baseUrl: checkIsOnPlatform() ? `${location.origin}/api/llm/proxy` : undefined
+    }
+  });
+};
 
 export const processNoteWithAI = async (
   type: AIServiceType,
   content: string,
   title: string
 ): Promise<string> => {
+  const ai = getAIInstance();
   const model = "gemini-3-flash-preview";
   
   let prompt = "";
@@ -24,7 +33,6 @@ export const processNoteWithAI = async (
       prompt = `Please correct any grammar, spelling, or punctuation issues in this note, while keeping the original tone. Title: "${title}"\n\nContent:\n${content}`;
       break;
     case AIServiceType.SUGGEST_TAGS:
-      // This usually returns JSON, so we handle it slightly differently in calling function if needed
       prompt = `Suggest 3-5 keywords or tags for this note titled "${title}". Content:\n${content}. Return only the tags separated by commas.`;
       break;
     default:
@@ -34,23 +42,31 @@ export const processNoteWithAI = async (
   try {
     const response = await ai.models.generateContent({
       model,
-      contents: prompt,
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
     });
-    // Note: response.text is a property, not a method.
     return response.text || "";
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.status === 401) {
+      alert("当前应用未开放用户登录，无法调用大模型服务");
+    }
     console.error("Gemini AI Error:", error);
     throw new Error("AI service failed to generate content.");
   }
 };
 
 export const getSmartTags = async (content: string, title: string): Promise<string[]> => {
+  const ai = getAIInstance();
   try {
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
-      contents: `Analyze this note and provide exactly 3 relevant tags. Return as a JSON array of strings. 
-      Title: ${title}
-      Content: ${content}`,
+      contents: [{
+        role: 'user',
+        parts: [{
+          text: `Analyze this note and provide exactly 3 relevant tags. Return as a JSON array of strings. 
+          Title: ${title}
+          Content: ${content}`
+        }]
+      }],
       config: {
         responseMimeType: "application/json",
         responseSchema: {
@@ -60,9 +76,11 @@ export const getSmartTags = async (content: string, title: string): Promise<stri
       }
     });
     
-    // Note: response.text is a property, not a method.
     return JSON.parse(response.text || "[]");
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.status === 401) {
+      alert("当前应用未开放用户登录，无法调用大模型服务");
+    }
     return [];
   }
 };
